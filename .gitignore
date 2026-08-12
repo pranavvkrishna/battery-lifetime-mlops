@@ -1,0 +1,10 @@
+data/
+*.mat
+*.pkl
+*.npz
+*.csv
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
