@@ -1,9 +1,8 @@
 # Feature engineering for Remaining Useful Life (RUL) prediction
 
 """ Slices each cell at multiple checkpoints (every CHECKPOINT_STRIDE cycles).
-At each checkpoint, uses a trailing WINDOW of recent cycles as input and
-predicts RUL = cycle_life - checkpoint_cycle, turning 129 cells into
-2058 training rows instead of one row per battery """
+At each checkpoint, uses a trailing WINDOW of recent cycles to predict
+RUL = cycle_life - checkpoint_cycle, turning 184 cells into 2724 rows """
 
 import argparse
 import pickle
@@ -19,7 +18,7 @@ SEQ_LEN = 1000           # Qdlin/Tdlin are already linearly interpolated to this
 
 def load_all_batches(data_dir: str) -> dict:
     all_cells = {}
-    for batch_file in ["batch1.pkl", "batch2.pkl", "batch3.pkl"]:
+    for batch_file in ["batch1.pkl", "batch2.pkl", "batch3.pkl", "batch4.pkl"]:
         path = Path(data_dir) / batch_file
         with open(path, "rb") as fp:
             batch_dict = pickle.load(fp)
