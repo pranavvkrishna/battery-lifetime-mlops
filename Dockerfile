@@ -14,12 +14,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # app code
 COPY api/main.py .
 
-# MLflow tracking data (model registry) — copied in so the container
-# has access to the same registered models without needing a live
-# connection back to your laptop
-COPY mlruns/ ./mlruns/
-COPY mlflow.db .
-
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
