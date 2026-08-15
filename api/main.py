@@ -3,15 +3,24 @@
 # Run: uvicorn main:app --reload --port 8080
 
 from contextlib import asynccontextmanager
+import os
 import mlflow
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from mlflow.tracking import MlflowClient
 from pydantic import BaseModel, Field
-
+ 
 REGISTRY_NAME = "battery-rul-model"
-
+ 
+# Points at Azure ML's MLflow registry when MLFLOW_TRACKING_URI is set
+# (e.g. via `docker run -e MLFLOW_TRACKING_URI=...`); falls back to local
+# ./mlruns for development if unset.
+tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+if tracking_uri:
+    mlflow.set_tracking_uri(tracking_uri)
+    print(f"MLflow tracking URI set from environment: {tracking_uri}")
+ 
 FEATURE_COLUMNS = [
     "qd_current", "qd_slope", "qd_min", "qd_std",
     "qc_slope", "qc_mean",
@@ -20,41 +29,41 @@ FEATURE_COLUMNS = [
     "chargetime_mean", "chargetime_slope",
     "window_size",
 ]
-
+ 
 model_state = {"model": None, "version": None, "stage": None}
-
-
+ 
+ 
 def load_production_model():
     """Find and load whichever model version is currently 'Production'."""
     client = MlflowClient()
     versions = client.search_model_versions(f"name='{REGISTRY_NAME}'")
     prod_versions = [v for v in versions if v.current_stage == "Production"]
-
+ 
     if not prod_versions:
         raise RuntimeError(
             f"No Production version found for '{REGISTRY_NAME}'. "
             "Run promote.py first to designate a production model."
         )
-
+ 
     prod_version = prod_versions[0]
     model_uri = f"models:/{REGISTRY_NAME}/{prod_version.version}"
     model = mlflow.pyfunc.load_model(model_uri)
-
+ 
     model_state["model"] = model
     model_state["version"] = prod_version.version
     model_state["stage"] = prod_version.current_stage
     print(f"Loaded model: {REGISTRY_NAME} version {prod_version.version} (Production)")
-
-
+ 
+ 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_production_model()
     yield
-
-
+ 
+ 
 app = FastAPI(title="Battery RUL Prediction API", lifespan=lifespan)
-
-
+ 
+ 
 class PredictRequest(BaseModel):
     qd_current: float = Field(..., description="Discharge capacity at checkpoint")
     qd_slope: float = Field(..., description="Slope of discharge capacity over trailing window")
@@ -72,22 +81,22 @@ class PredictRequest(BaseModel):
     chargetime_mean: float
     chargetime_slope: float
     window_size: int = Field(50, description="Number of cycles in trailing window")
-
-
+ 
+ 
 class PredictResponse(BaseModel):
     predicted_rul: float
     model_version: str
     model_stage: str
-
-
+ 
+ 
 @app.get("/health")
 def health():
     return {
         "status": "healthy",
         "model_loaded": model_state["model"] is not None,
     }
-
-
+ 
+ 
 @app.get("/model-info")
 def model_info():
     return {
@@ -95,30 +104,31 @@ def model_info():
         "version": model_state["version"],
         "stage": model_state["stage"],
     }
-
-
+ 
+ 
 @app.post("/predict", response_model=PredictResponse)
 def predict(request: PredictRequest):
     if model_state["model"] is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
-
+ 
     row = pd.DataFrame([request.model_dump()])[FEATURE_COLUMNS]
-
+ 
     try:
         pred = model_state["model"].predict(row)
         rul = float(np.array(pred).flatten()[0])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
-
+ 
     return PredictResponse(
         predicted_rul=round(rul, 1),
         model_version=str(model_state["version"]),
         model_stage=model_state["stage"],
     )
-
-
+ 
+ 
 @app.post("/reload-model")
 def reload_model():
     """Reload the current Production model — call after promote.py runs."""
     load_production_model()
     return {"status": "reloaded", "version": model_state["version"]}
+ 
