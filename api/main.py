@@ -8,6 +8,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from mlflow.tracking import MlflowClient
 from pydantic import BaseModel, Field
  
@@ -62,6 +63,17 @@ async def lifespan(app: FastAPI):
  
  
 app = FastAPI(title="Battery RUL Prediction API", lifespan=lifespan)
+ 
+# Allow the dashboard (running from any origin) to call this API directly
+# from the browser. Wide open here since this is a portfolio demo, not
+# a system handling sensitive data — tighten to specific origins for
+# anything real.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
  
  
 class PredictRequest(BaseModel):
