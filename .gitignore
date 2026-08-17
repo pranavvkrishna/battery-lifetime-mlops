@@ -10,3 +10,5 @@ __pycache__/
 venv/
 mlflow.db
 mlruns/
+node_modules/
+dist/
